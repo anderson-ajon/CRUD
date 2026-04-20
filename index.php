@@ -107,7 +107,7 @@ function verificarBackupDiario($pastaBackup, $comandoBackup) {
 
             <div class="w3-third w3-container">
 
-                <input class="w3-input w3-margin-bottom" type="file" id="foto" name="foto">
+                <input class="w3-input w3-margin-bottom" type="file" id="foto" name="foto" capture="camera">
 
             </div>
 
