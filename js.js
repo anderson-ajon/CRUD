@@ -14,15 +14,7 @@ const PIN_HASH = "MTAxMA==";
 const STORAGE_KEY = "acesso_status";
 
 
-
 // A
-// ATALHO: Ctrl + L para reabrir o PIN
-document.addEventListener('keydown', function (e) {
-    if (e.ctrlKey && e.key.toLowerCase() === 'l') {
-        e.preventDefault();
-        pedirPin();
-    }
-});
 // ----------------------------------------------------------------------------
 
 // B
@@ -55,6 +47,29 @@ function controlarBotoes() {
 
 
 }
+
+
+
+function carregarLocalizacoes() {
+    fetch('gerencia.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: 'acao=prateleiras'
+    })
+        .then(res => res.json())
+        .then(data => {
+            const datalist = document.getElementById("localizacoes");
+            datalist.innerHTML = "";
+
+            data.forEach(loc => {
+                let option = document.createElement("option");
+                option.value = loc;
+                datalist.appendChild(option);
+            });
+        });
+}
 // ----------------------------------------------------------------------------
 
 // D
@@ -81,26 +96,18 @@ function editar(id) {
         .then(p => {
             document.getElementById('id').value = p.id;
             document.getElementById('descricao').value = p.descricao;
+            document.getElementById('quantidade').value = p.quantidade;
+            document.getElementById('unidade').value = p.unidade;
             document.getElementById('valor').value = p.valor;
+            document.getElementById('localizacao').value = p.localizacao;
             document.getElementById('descricao').focus();
         });
-}
-// Versão Busca no Array
-function editar2(id) {
-    let produto = produtos.find(p => p.id == id);
-
-    if (!produto) return;
-
-    document.getElementById('id').value = produto.id;
-    document.getElementById('descricao').value = produto.descricao;
-    document.getElementById('valor').value = produto.valor;
-    document.getElementById('descricao').focus();
 }
 
 // EXCLUIR
 function excluir(id) {
 
-    if (confirm('Excluir?')) {
+    if (confirm('Excluir registro nº ' + id + '?')) {
         post('gerencia.php', {
             acao: 'excluir',
             id: id
@@ -119,23 +126,73 @@ function formatarMoeda(valor) {
     });
 }
 
+// FORMATAÇÃO DE DATA
+// function formatarData(dataStr) {
+//     const data = new Date(dataStr);
+//     return data.toLocaleDateString('pt-BR');
+// }
+
+// essa é à prova de fuso horário
+// function formatarData(dataStr) {
+//     const [ano, mes, dia] = dataStr.split(" ")[0].split("-");
+//     return `${dia}/${mes}/${ano.slice(-2)}`;
+// }
+function formatarData(dataStr) {
+    const data = new Date(dataStr + "T00:00:00"); // força horário local
+    // const data = new Date(dataStr.replace(" ", "T")); // evita problema de compatibilidade
+    return data.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit'
+    });
+}
+
+// FORMATAÇÃO DE DATA BR para ISO (para enviar ao servidor)
+function formatarBrParaISO(dataBR) {
+    const [dia, mes, ano] = dataBR.split("/");
+    return `${ano}-${mes}-${dia}`;
+}
+
+// FILTRAR POR DATA (exemplo de uso: filtrarPorData(produtos, "2026-03-29"))
+function filtrarPorData(lista, dataFiltro) {
+    return lista.filter(item => {
+        const dataItem = item.criado_em.split(" ")[0]; // "2026-03-29"
+        return dataItem === dataFiltro;
+    });
+}
+
+
 // FILTRAR TABELA
 function filtrarTabela() {
     let filtro = document.getElementById('filtro').value.toLowerCase().replace(',', '.');
+
     let html = '';
 
     // filtra o array produtos
     let filtrados = produtos.filter(p => {
-        let valor = String(p.valor); // valor real (10.5)
-        let valorFormatado = Number(p.valor)
-            .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-            .toLowerCase();
+        let quantidade = String(p.quantidade);  // quantidade (10)
+        let unidade = String(p.unidade);        // unidade (kg, g, L, etc.)
+        // let valor = String(p.valor);            // valor real (10.5)
+        // let valorFormatado = Number(p.valor)
+        //     .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+        //     .toLowerCase();
+        let localizacao = String(p.localizacao); // localização (ex: P1 F2)
+        // let alterado_em = String(p.alterado_em); // data de alteração (ex: 2024-08-01 12:34:56)
+        let alterado_em = formatarData(p.alterado_em).toLowerCase();
+        let dataFormatada = formatarData(p.alterado_em).toLowerCase();
+        let dataOriginal = String(p.alterado_em).toLowerCase();
 
         return (
             p.descricao.toLowerCase().includes(filtro) ||
             String(p.id).includes(filtro) ||
-            valor.includes(filtro) ||                // 10.5
-            valorFormatado.includes(filtro)          // R$ 10,50
+            quantidade.includes(filtro) ||
+            unidade.toLowerCase().includes(filtro) ||
+            // valor.includes(filtro) ||                       // 10.5
+            // valorFormatado.includes(filtro) ||              // R$ 10,50
+            localizacao.toLowerCase().includes(filtro) ||   // P1 F2
+            alterado_em.includes(filtro) ||
+            dataOriginal.includes(filtro) ||
+            dataFormatada.includes(filtro)
         );
     });
 
@@ -143,6 +200,29 @@ function filtrarTabela() {
         html = `<tr><td colspan="5" class="w3-center">Nenhum produto encontrado</td></tr>`;
     } else {
         filtrados.forEach(p => {
+
+            //let classeData = maisDe90Dias(p.alterado_em) ? 'w3-text-red' : '';
+            const data = new Date(p.alterado_em.replace(" ", "T"));
+            const hoje = new Date();
+            //const dias = (hoje - data) / (1000 * 60 * 60 * 24);
+            const dias = Math.floor((hoje - data) / (1000 * 60 * 60 * 24));
+
+            let classeData = '';
+            let n1 = '<b>';
+            let n2 = '</b>';
+
+            if (dias > 90) {
+                classeData = 'w3-text-red';
+            } else if (dias > 60) {
+                classeData = 'w3-text-orange';
+            } else if (dias > 30) {
+                classeData = 'w3-text-blue';
+            } else {
+                n1 = '';
+                n2 = '';
+                classeData = 'w3-text-black'; // opcional (já é padrão)
+            }
+
             html += `
             <tr>
                 <td class="w3-right-align">${p.id}</td>                
@@ -150,10 +230,17 @@ function filtrarTabela() {
                     <img src="uploads/${p.foto || 'sem-foto.jpg'}" style="width:50px;height:50px;object-fit:cover;" onmouseover="mostrarPreview(event, this.src)" onmouseout="ocultarPreview()">
                 </td>                
                 <td class="w3-left-align">${escapeHTML(p.descricao)}</td>
-                <td class="w3-right-align">${Number(p.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                <td class="w3-right-align">${Number(p.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
+                
+                <!-- <td class="w3-center">${p.unidade}</td> -->
+                <!-- <td class="w3-right-align">${Number(p.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td> -->
+                <td class="w3-center">${escapeHTML(p.localizacao)}</td>                
+                <!-- <td class="w3-center">${formatarData(p.alterado_em)}</td> -->
+                <td class="w3-center ${classeData}">${n1}${formatarData(p.alterado_em)}${n2}</td>
+                <!-- <td class="w3-center">${p.unidade}</td> -->
                 <td class="w3-center">
-                    <button class="w3-button w3-yellow w3-small" onclick="editar(${p.id})">Editar</button>
-                    <button class="w3-button w3-red w3-small" onclick="excluir(${p.id})">Excluir</button>
+                    <button class="w3-button w3-yellow w3-small w3-round-large" onclick="editar(${p.id})">Editar</button>
+                    <button class="w3-button w3-red w3-small w3-round-large" onclick="excluir(${p.id})">Excluir</button>
                 </td>
             </tr>`;
         });
@@ -207,38 +294,18 @@ function listar() {
     });
 }
 
-// Tabela sem filtro
-function listar2() {
-    post('gerencia.php', {
-        acao: 'listar'
-    })
-        .then(dados => {
-            let html = '';
-
-            dados.forEach(p => {
-                html += `
-            <tr>
-                <td class="w3-right-align">${p.id}</td>
-                <td class="w3-left-align">${escapeHTML(p.descricao)}</td>
-                <td class="w3-right-align">${formatarMoeda(p.valor)}</td>
-                <td class="w3-center">
-                    <button onclick="editar(${p.id})">Editar</button>
-                    <button onclick="excluir(${p.id})">Excluir</button>
-                </td>
-            </tr>`;
-            });
-
-            document.getElementById('tabela').innerHTML = html;
-        });
-}
-
 // LIMPAR
 function limpar() {
     document.getElementById('id').value = '';
     document.getElementById('descricao').value = '';
-    document.getElementById('valor').value = '';
+    document.getElementById('valor').value = 0;
     document.getElementById('filtro').value = '';
     document.getElementById('descricao').focus();
+    document.getElementById('quantidade').value = '';
+    // document.getElementById('unidade').value = '';
+    document.getElementById('unidade').value = 'un'; // valor padrão
+    document.getElementById('localizacao').value = '';
+    carregarLocalizacoes(); // recarrega opções de localização
     document.getElementById('foto').value = '';
     filtrarTabela();
 
@@ -257,6 +324,33 @@ function mostrarPreview(e, src) {
     preview.style.top = (e.clientY - 100) + 'px';
     preview.style.left = (e.clientX + 50) + 'px';
 }
+
+function maisDe90Dias(dataStr) {
+    const hoje = new Date();
+    const data = new Date(dataStr.replace(" ", "T"));
+
+    const diff = hoje - data; // diferença em ms
+    const dias = diff / (1000 * 60 * 60 * 24);
+
+    return dias > 90;
+}
+
+function mostrarTamanhoTela() {
+    const larguraTela = screen.width;
+    const alturaTela = screen.height;
+
+    const larguraJanela = window.innerWidth;
+    const alturaJanela = window.innerHeight;
+
+    console.log("Tela total: " + larguraTela + "x" + alturaTela);
+    console.log("Janela (viewport): " + larguraJanela + "x" + alturaJanela);
+
+    alert(
+        "Tela total: " + larguraTela + "x" + alturaTela + "\n" +
+        "Janela (viewport): " + larguraJanela + "x" + alturaJanela
+    );
+}
+
 // ----------------------------------------------------------------------------
 
 // O
@@ -308,23 +402,48 @@ function pedirPin() {
 function salvar() {
     let id = document.getElementById('id').value;
     let descricao = document.getElementById('descricao').value.trim();
+    let quantidade = document.getElementById('quantidade').value.trim();
+    let unidade = document.getElementById('unidade').value.trim();
+    let localizacao = document.getElementById('localizacao').value.trim();
     let valor = document.getElementById('valor').value.trim();
     let foto = document.getElementById('foto').files[0];
 
+
+
+    // Validação de campos obrigatórios
     if (!descricao) {
-        alert('Digite a descrição');
+        alert('Digite a descrição do produto');
+        document.getElementById('descricao').focus();
         return;
     }
 
-    if (!valor) {
-        alert('Digite o valor');
+
+    const num = parseFloat(valor);
+    // Validação de valor numérico
+    // isNaN = "não é um número"
+    // parseFloat = tenta converter para número, retorna NaN se falhar
+    // if (!valor || isNaN(parseFloat(valor)) || parseFloat(valor) <= 0) {
+    if (valor === "" || isNaN(num) || num < 0) {
+        alert('Digite um valor numérico válido');
+        document.getElementById('valor').focus();
         return;
     }
+
+    if (!quantidade || isNaN(parseFloat(quantidade))) {
+        alert('Digite uma quantidade numérica válida');
+        document.getElementById('quantidade').focus();
+        return;
+    }
+
+
 
     let formData = new FormData();
     formData.append('acao', id ? 'atualizar' : 'cadastrar');
     formData.append('id', id);
     formData.append('descricao', descricao);
+    formData.append("quantidade", document.getElementById("quantidade").value);
+    formData.append("unidade", document.getElementById("unidade").value);
+    formData.append('localizacao', localizacao);
     formData.append('valor', valor);
 
     if (foto) {
@@ -347,48 +466,14 @@ function salvar() {
             limpar();
         });
 }
-
-// SALVAR COM VALIDAÇÃO
-function salvar2() {
-    let id = document.getElementById('id').value;
-    let descricao = document.getElementById('descricao').value.trim();
-    let valor = document.getElementById('valor').value.trim();
-
-    if (!descricao) {
-        alert('Digite a descrição');
-        return;
-    }
-
-    if (!valor) {
-        alert('Digite o valor');
-        return;
-    }
-
-    if (parseFloat(valor) <= 0) {
-        alert('Valor deve ser maior que zero');
-        return;
-    }
-
-    // Se tiver ID, é atualização, senão é cadastro
-    let acao = id ? 'atualizar' : 'cadastrar';
-
-    post('gerencia.php', {
-        acao: acao,
-        id: id,
-        descricao: descricao,
-        valor: valor
-    }).then(res => {
-
-        if (res.erro) {
-            alert(res.erro);
-            return;
-        }
-
-        limpar();
-        listar();
-    });
-}
 // ----------------------------------------------------------------------------
+
+
+
+// T
+// ----------------------------------------------------------------------------
+
+
 
 // V
 function verificarStorage() {
@@ -404,6 +489,8 @@ function verificarStorage() {
     controlarBotoes();
 }
 
+
+
 // VERIFICAR ACESSO
 function verificarAcesso() {
     let pin = prompt("Digite o código de acesso:");
@@ -418,6 +505,12 @@ function verificarAcesso() {
 
     controlarBotoes();
 }
+
+
+
+
+
+
 // ----------------------------------------------------------------------------
 // INICIALIZAÇÃO
 // ----------------------------------------------------------------------------
@@ -427,6 +520,12 @@ function verificarAcesso() {
 // INICIAR
 // 1. carrega dados normalmente
 listar();
+
+//console.log("rodou");
+// mostrarTamanhoTela();
+
+carregarLocalizacoes();
+document.getElementById('descricao').focus();
 
 // 2. verifica estado salvo
 verificarStorage();
@@ -441,7 +540,7 @@ if (acessoStatus === null) {
     }, 300);
 }
 
-console.log("Pressione Ctrl + L para inserir o código novamente");
+
 
 /* Anotações:
 Regra prática(use isso no dia a dia)
@@ -496,5 +595,84 @@ if (true) {
 }
 console.log(x); // erro
 comportamento correto
+
+
+
+// SALVAR COM VALIDAÇÃO
+function salvar2() {
+    let id = document.getElementById('id').value;
+    let descricao = document.getElementById('descricao').value.trim();
+    let valor = document.getElementById('valor').value.trim();
+
+    if (!descricao) {
+        alert('Digite a descrição');
+        return;
+    }
+
+    if (!valor) {
+        alert('Digite o valor');
+        return;
+    }
+
+    if (parseFloat(valor) <= 0) {
+        alert('Valor deve ser maior que zero');
+        return;
+    }
+
+    // Se tiver ID, é atualização, senão é cadastro
+    let acao = id ? 'atualizar' : 'cadastrar';
+
+    post('gerencia.php', {
+        acao: acao,
+        id: id,
+        descricao: descricao,
+        valor: valor
+    }).then(res => {
+
+        if (res.erro) {
+            alert(res.erro);
+            return;
+        }
+
+        limpar();
+        listar();
+    });
+}
+
+
+// Tabela sem filtro
+function listar2() {
+    post('gerencia.php', {
+        acao: 'listar'
+    })
+        .then(dados => {
+            let html = '';
+
+            dados.forEach(p => {
+                html += `
+            <tr>
+                <td class="w3-right-align">${p.id}</td>
+                <td class="w3-left-align">${escapeHTML(p.descricao)}</td>
+                <td class="w3-right-align">${formatarMoeda(p.valor)}</td>
+                <td class="w3-center">
+                    <button onclick="editar(${p.id})">Editar</button>
+                    <button onclick="excluir(${p.id})">Excluir</button>
+                </td>
+            </tr>`;
+            });
+
+            document.getElementById('tabela').innerHTML = html;
+        });
+}
+
+// TECLA DE ATALHO: Ctrl + L para reabrir o PIN
+// document.addEventListener('keydown', function (e) {
+//     if (e.ctrlKey && e.key.toLowerCase() === 'l') {
+//         e.preventDefault();
+//         pedirPin();
+//     }
+// });
+
+// console.log("Pressione Ctrl + L para inserir o código novamente");
 
 */

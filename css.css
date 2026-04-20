@@ -71,22 +71,52 @@ tbody tr {
 }
 
 tbody tr td:nth-child(1) {
-    width: 5%;
+    cursor: pointer;
+    /* width: 5%; */
 }
 
 tbody tr td:nth-child(2) {
-    width: 5%;
+    cursor: pointer;
+    /* width: 5%; */
 }
 
 tbody tr:hover td:nth-child(3) {
     font-weight: bold;
-    width: 50%;
+    color: blue;
+    /* width: 50%; */
 }
 
 tbody tr td:nth-child(4) {
-    width: 20%;
+    cursor: pointer;
+    /* width: 20%; */
 }
 
 tbody tr td:nth-child(5) {
-    width: 20%;
+    cursor: pointer;
+    /* width: 20%; */
+}
+
+#valor,
+#unidade {
+    visibility: hidden;
+}
+
+#previewImgTag {
+    width: 300px;
+}
+
+/* Se for Mobile */
+@media screen and (max-width: 1000px) {
+    /* tabela de tamanho em px de telas*/
+    /* 
+    mobile pequeno  = 480px
+    mobile médio    = 768px
+    mobile grande   = 1024px    
+    */
+
+
+    /* Estilos específicos para dispositivos móveis */
+    #previewImgTag {
+        width: 100%;
+    }
 }

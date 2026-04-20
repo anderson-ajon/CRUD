@@ -1,44 +1,56 @@
 <?php
-// ADICIONADO: iniciar tempo
-$inicio = microtime(true);
-
-require 'conexao.php';
+$inicio = microtime(true);                      // Iniciar contador de tempo
+require 'conexao.php';                          // Conexão com o banco de dados
 
 header('Content-Type: application/json; charset=utf-8');
 
-$acao = $_POST['acao'] ?? '';
+$acao = $_POST['acao'] ?? '';                   // Receber ação via POST
+// $acao = $_GET['acao'] ?? '';                   // Receber ação via POST
 
 switch ($acao) {
 
     case 'listar':
-        $stmt = $conexao->query("SELECT * FROM produtos ORDER BY descricao ASC");
+        $sql = "SELECT * FROM produtos ORDER BY descricao ASC";
+        $stmt = $conexao->query($sql);
 
-        // ADICIONADO: calcular tempo
+        // Calcular tempo
         $fim = microtime(true);
         $tempo = round(($fim - $inicio) * 1000, 2); // ms
 
-        // CORREÇÃO: novo formato com tempo
+        // Novo formato com tempo
         echo json_encode([
             'dados' => $stmt->fetchAll(),
             'tempo' => $tempo
         ], JSON_UNESCAPED_UNICODE);
+        exit;
+        break;
+
+    case 'prateleiras':
+        $sql = "SELECT DISTINCT localizacao FROM produtos WHERE localizacao IS NOT NULL AND localizacao <> '' ORDER BY localizacao ASC";
+        $stmt = $conexao->query($sql);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_COLUMN), JSON_UNESCAPED_UNICODE);
+        exit;
         break;
 
     case 'cadastrar':
     case 'atualizar':
-
+        // RECEBER E TRATAR DADOS PARA AMBAS AÇÕES
         $descricao = trim($_POST['descricao'] ?? '');
         $descricao = mb_strtoupper($descricao, 'UTF-8');
+        $quantidade = floatval(str_replace(',', '.', $_POST['quantidade'] ?? 0));
+        $unidade = mb_strtoupper($_POST['unidade'] ?? 'UN');
+        $localizacao = mb_strtoupper($_POST['localizacao'] ?? '');
         $valor = trim($_POST['valor'] ?? '');
         $valor = floatval(str_replace(',', '.', $valor));
 
-        // VALIDAÇÃO
-        if ($descricao === '' || $valor <= 0) {
+        // Validar campos obrigatórios
+        if ($descricao === '' || $valor < 0) {
             echo json_encode(['erro' => 'Preencha todos os campos']);
             exit;
         }
 
-        if (!is_numeric($valor) || $valor <= 0) {
+        // Validar valor Inteiro ou menor que zero
+        if (!is_numeric($valor) || $valor < 0) {
             echo json_encode(['erro' => 'Valor inválido']);
             exit;
         }
@@ -72,16 +84,10 @@ switch ($acao) {
 
         if ($acao === 'cadastrar') {
             // CADASTRAR
-
-            $stmt = $conexao->prepare("
-                INSERT INTO produtos (descricao, valor, foto)
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([$descricao, $valor, $fotoNome]);
+            $stmt = $conexao->prepare("INSERT INTO produtos (descricao, quantidade, unidade, valor, localizacao, foto) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$descricao, $quantidade, $unidade, $valor, $localizacao, $fotoNome]);
         } else {
             // ATUALIZAR
-
             $id = $_POST['id'] ?? 0;
 
             if (!$id) {
@@ -106,15 +112,11 @@ switch ($acao) {
 
             // Atualizar banco
             if ($fotoNome) {
-                $stmt = $conexao->prepare("
-                    UPDATE produtos SET descricao=?, valor=?, foto=? WHERE id=?
-                ");
-                $stmt->execute([$descricao, $valor, $fotoNome, $id]);
+                $stmt = $conexao->prepare("UPDATE produtos SET descricao=?, quantidade=?, unidade=?, valor=?, localizacao=?, foto=?, alterado_em=NOW() WHERE id=?");
+                $stmt->execute([$descricao, $quantidade, $unidade, $valor, $localizacao, $fotoNome, $id]);
             } else {
-                $stmt = $conexao->prepare("
-                    UPDATE produtos SET descricao=?, valor=? WHERE id=?
-                ");
-                $stmt->execute([$descricao, $valor, $id]);
+                $stmt = $conexao->prepare("UPDATE produtos SET descricao=?, quantidade=?, unidade=?, valor=?, localizacao=?, alterado_em=NOW() WHERE id=?");
+                $stmt->execute([$descricao, $quantidade, $unidade, $valor, $localizacao, $id]);
             }
         }
 
@@ -122,6 +124,7 @@ switch ($acao) {
         break;
 
     case 'buscar':
+        // Buscar por ID
         $id = $_POST['id'] ?? 0;
 
         $stmt = $conexao->prepare("SELECT * FROM produtos WHERE id=?");
@@ -131,6 +134,7 @@ switch ($acao) {
         break;
 
     case 'excluir':
+        // Excluir por ID
         $id = $_POST['id'] ?? 0;
 
         // buscar imagem
@@ -140,6 +144,7 @@ switch ($acao) {
 
         // excluir imagem do servidor
         if ($produto && $produto['foto'] && $produto['foto'] !== 'sem-foto.jpg') {
+
             $caminho = 'uploads/' . $produto['foto'];
 
             if (file_exists($caminho)) {
@@ -155,5 +160,6 @@ switch ($acao) {
         break;
 
     default:
+        // AÇÃO INVÁLIDA
         echo json_encode(['erro' => 'Ação inválida'], JSON_UNESCAPED_UNICODE);
 }
